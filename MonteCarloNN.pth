@@ -1,0 +1,68 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+import numpy as np
+import pandas as pd
+
+class MonteCarloNN(nn.modeule):
+  def __init__(self, input_size, hidden_size, output_size):
+    super(MonteCarloNN, self).__init__()
+    self.fc1 = nn.Linear(input_size, hidden_size)
+    self.relu = nn.ReLU()
+    self.fc2 = nn.linear(hidden_size, hidden_size)
+    self.fc3 = nn.linear(hidden_size, output_size)
+
+  def forward(self, x):
+    x = self.fc1(x)
+    x = self.relu(x)
+    x = self.fc2(x)
+    x = self.relu(x)
+    x = self.fc3(x)
+    return x
+
+stock_prices = pd.read_csv("stock_prices.csv", header=None).values
+payoffs = pd.read_csv("payoffs.csv", header=None).values
+
+scaler = StandardScaler()
+stock_prices = scaler.fit_transform(stock_prices)
+
+X_train, X_test, y_train, y_test = train_test_split(stock_prices, payoffs, test_size = 0.2, random_state = 314)
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+X_train = torch.tensor(X_train, dtype=torch.float32).to(device)
+X_test = torch.tensor(X_test, dtype=torch.float32).to(device)
+y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
+y_test = torch.tensor(y_test, dtype=torch.float32).to(device)
+
+input_size = X_train.shape[1]
+hidden_size = 64
+output_size = 1
+learning_rate = 0.001
+num_epochs = 500
+
+model = MonteCarloNN(input_size, hidden_size, output_size)
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr = learning_rate).to(device)
+
+for epoch in range(num_epochs):
+  model.train()
+  outputs = model(X_train)
+  loss = criterion(outputs, y_train)
+
+  optimizer.zero_grad()
+  loss.backward()
+  optimizer.step()
+
+  if (epoch + 1) % 50 == 0:
+    print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}")
+
+model.eval()
+with torch.no_grad():
+  predictions = model(X_test)
+  test_loss = criterion(predictions, y_test)
+  print(f"Test Loss (MSE): {test_loss.item():.4f}")
+
+torch.save(model.state_dict(), "monte_carlo_nn.pth")
+print("Model saved as 'monte_carlo_nn.pth'")
